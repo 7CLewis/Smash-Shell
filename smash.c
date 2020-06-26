@@ -1,10 +1,23 @@
+#define _GNU_SOURCE
 #define MAXLINE 4096
 #include "smash.h"
 #include "history.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-//#define _POSIX_C_SOURCE 200809L
+#include <fcntl.h>    //File descriptors 
+#include <sys/wait.h> //wait() function call
+#include <unistd.h>   //fork() function call
+
+/**
+ * In case of a keyboard interrupt (Ctrl-C),
+ * Kill the current process and return to smash
+ */
+void sig_handler(int signal) {
+  if(signal == SIGINT) {
+    fputs("\n$ ", stderr);
+  }
+}
 
 int main(int argc, char **argv) 
 {
@@ -12,6 +25,7 @@ int main(int argc, char **argv)
 	setvbuf(stdout, NULL, _IONBF, 0);
 
  	init_history();
+	signal(SIGINT, sig_handler);
 
     char bfr[MAXLINE];
 
@@ -20,7 +34,7 @@ int main(int argc, char **argv)
 		char *p = strchr(bfr, '\n');
 		
 		if(p == NULL) {
-			fputs("line too long", stderr);
+			fputs("The line you entered was too long", stderr);
 			exit(1);
 		}
 		

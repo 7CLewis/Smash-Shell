@@ -19,8 +19,8 @@
 #include <fcntl.h>	  //Manipulating file descriptors
 
 //Execute an external command - not directly supported by smash
-void executeExternalCommand(char* prog, char* argsArr[]) {
-
+void execute_external_command(char* prog, char* argsArr[]) {
+    
     execvp(prog, argsArr);
     
     //if these lines are reached, execvp did not execute properly
@@ -30,7 +30,7 @@ void executeExternalCommand(char* prog, char* argsArr[]) {
 }
 
 // Execute the command the user passed in
-int executeCommand(char *args[], int argsCount, int sequenceCount) {
+int execute_command(char *args[], int argsCount, int sequenceCount) {
 	
     int exitStatus = 0;
     if (argsCount == 0) {
@@ -65,34 +65,8 @@ int executeCommand(char *args[], int argsCount, int sequenceCount) {
 
     //Any command that isn't one of the ones above
     else {
-        sequenceCount++;
         return EXTERNAL_COMMAND;
     }
 
-    sequenceCount++;
     return exitStatus;
-}
-
-/* Redirect stdin to read from the specified file
- * Return the file descriptor that was created
- */
-int openInputFile(char *fileName) {
-    return 0;
-}
-
-/*
- * Open a file of the given file name to write to from stdout.
- * Return the file descriptor that was created.
- */
-int openOutputFile(char *fileName) {
-    return 0;
-}
-
-void dupProper(int pipeType) {
-
-	
-}
-
-void closeProper(int pipeType) {
-
 }
