@@ -17,22 +17,45 @@
 #include <errno.h> 	  //Retrieve error codes
 #include <fcntl.h>	  //Manipulating file descriptors
 
+int sequenceCount = 0;
+
+//Execute an external command - not directly supported by smash
+int executeExternalCommand(char* prog, char* argsArr[]) {
+
+    setvbuf(stdout,NULL,_IONBF,0);
+    int pid = fork();
+    int exitStatus = 0;
+
+    //If the current process is the child process
+    if(pid == 0) {
+        execvp(prog, argsArr);
+        //if these lines are reached, execvp did not execute properly
+        perror("Execvp failed");
+		exit(-1);
+    } else {
+
+        int originalExitStatus;
+        wait(&originalExitStatus);   
+
+        //Adjust the exit status
+		exitStatus = WEXITSTATUS(originalExitStatus);
+    }
+    return exitStatus;
+}
 
 // Execute the command the user passed in
 int executeCommand(char *args[], int argsCount) {
 	
     int exitStatus = 0;
-
     if (argsCount == 0) {
         return exitStatus;
     }
-
     char *program = args[0];
 
     //exit - exit the smash shell
     if(strncmp(program, EXIT_COMMAND, EXIT_COMMAND_LENGTH) == 0) {
         clear_history();
-        exit(exitStatus);
+        return -22;
     }
 
     //cd - change directories
@@ -47,9 +70,19 @@ int executeCommand(char *args[], int argsCount) {
 
     //history - print the 10 most recent commands, along with their exit status
     else if (strncmp(program, HISTORY_COMMAND, HISTORY_COMMAND_LENGTH) == 0) {
-        print_history(0);
+        if(sequenceCount > 10) {
+            print_history(sequenceCount-10);
+        } else {
+            print_history(0);
+        }
     }
 
+    //external command - any command that isn't one of the ones above
+    else {
+        exitStatus = executeExternalCommand(program, args);
+    }
+
+    sequenceCount++;
     return exitStatus;
 }
 

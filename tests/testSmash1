@@ -1,0 +1,209 @@
+#------------------------------------------------------------------------------
+#
+# SYNOPSIS
+#   testSmash1 -- tests basic functionality of CS253 smash2
+#
+# USAGE
+#   testSmash1 exe points
+#
+#     exe -    Name of the expected executable program's file
+#     points - Number of points awarded to the assigned project
+#
+# DESCRIPTION
+#   Runs basic tests for the smash project.
+#
+#   Writes a single numeric value to stdout, the number of points deducted
+#   for  defects.
+#
+#   The project executable must have been previously built.
+#
+# TEST CASES
+#   exit
+#   cd nonexistingdirectory
+#   cd existingdirectory
+#   foo arg1 arg2 arg3
+#
+# ERRORS
+#   If the test cannot be executed, the script writes an error message to
+#   stderr and exits with non-zero status.
+#
+#------------------------------------------------------------------------------
+
+
+
+#Initialization
+let pointsLost=0
+TMPFILE=/tmp/"$USER""$$"
+BASICHISTORY=../basicHistory.in
+
+#Note:  Apple does not distribute the timeout utility with MacOS, however it
+#can be installed with brew install coreutils.  Else assign an empty string
+#to the TIMEOUT variable.  TIMEOUT is used to resume grading after $EXE hangs.
+TIMEOUT="timeout 5s"
+$TIMEOUT=
+
+
+
+
+#--------------------------------------------------------------------------------
+# Define function to log a message to stderr
+# Usage:  logMsg $LINENO messageText
+#--------------------------------------------------------------------------------
+logMsg() {
+  1>&2 echo "[$1] " "$2"
+}
+
+
+
+
+#---------------------------------------------------------------------------------
+# Define function to deduct points if the specified file exists
+# Usage:  deductFileExists $LINENO filename nPoints
+#---------------------------------------------------------------------------------
+deductFileExists() {
+  if [ -e "$2" ]; then
+    deductPoints $1 $3
+    logMsg "$1" "ERROR:  Unexpected file '$2'.  Deduct $3 points"
+  fi
+}
+
+
+#---------------------------------------------------------------------------------
+# Define function to deduct points if regexp is missing from string.  Ignores
+# case.
+# Usage:  deductMissingString $LINENO string regexp nPoints
+#---------------------------------------------------------------------------------
+deductMissingString() {
+  if ! echo "$2" | grep -i -q "$3" ; then
+    deductPoints $1 $4
+    logMsg "$1" " ERROR:  Substring '$3' missing in string, '$2'."
+  fi
+}
+
+
+
+
+#---------------------------------------------------------------------------------
+# Define function to deduct points if regexp appears in string.  Ignores
+# case.
+# Usage:  deductMissingString $LINENO string regexp nPoints
+#---------------------------------------------------------------------------------
+deductString() {
+  if echo "$2" | grep -i -q "$3" ; then
+    deductPoints $1 $4
+    logMsg "$1" " ERROR:  Regexp '$3' unexpectedly appears in string, '$2'."
+  fi
+}
+
+
+
+
+
+#---------------------------------------------------------------------------------
+# Define function to deduct points if regexp is missing from a specified file
+# Usage:  deductnGrep $LINENO regexp filename nPoints
+#---------------------------------------------------------------------------------
+deductnGrep() {
+  output=$(grep -i "$2" "$3")
+  if [ "$?" != 0 ]; then
+    deductPoints $1 $4
+    logMsg "$1" " ERROR:  Could not grep regexp '$2' in '$3'."
+  fi
+}
+
+
+
+
+#---------------------------------------------------------------------------------
+# Define function to deduct points if regexp is found in a specified file
+# Usage:  deductGrep $LINENO regexp filename nPoints
+#---------------------------------------------------------------------------------
+deductGrep() {
+  output=$(grep -i "$2" "$3")
+  if [ "$?" == 0 ]; then
+    deductPoints $1 $4
+    logMsg "$1" " ERROR:  Found unexpected regexp '$2' in '$3'."
+  fi
+}
+
+
+
+#---------------------------------------------------------------------------------
+# Define function to deduct points (accumulated in $pointsLost)
+# Usage:  deductPoints $LINENO nPoints
+#---------------------------------------------------------------------------------
+deductPoints() {
+  let pointsLost+=$2
+  if [ $pointsLost -gt $MAXPOINTS ]; then
+    let pointsLost=$MAXPOINTS
+  fi
+  logMsg $1 "Deducting $2 points"
+}
+
+
+
+
+#--------------------------------------------------------------------------------
+# Grading starts here
+#--------------------------------------------------------------------------------
+
+#Verify the expected number of command-line arguments
+if [ $# -ne 2 ]; then
+   >&2 echo "USAGE:  $0 exe points"
+   exit $MAXPOINTS
+fi
+
+#Process the command-line arguments
+EXE=$1
+MAXPOINTS=$2
+
+#Initialization
+let LETTERGRADE=MAXPOINTS/10
+let HALFLETTERGRADE=MAXPOINTS/20
+
+#Document where we are grading
+project=`pwd`
+logMsg $LINENO "----- Begin grading contents of $project with $0 -----"
+
+#Verify the executable program exists
+logMsg $LINENO "Verifying $EXE is an executable program"
+if [ ! -x $EXE ]; then
+  logMsg $LINENO "FATAL:  $EXE is not an executable program"
+  echo $MAXPOINTS
+  exit $MAXPOINTS
+fi
+
+#Smash should exit normally given an exit command
+logMsg $LINENO "Grading exit command"
+echo exit | $TIMEOUT $EXE 2>/dev/null
+if [ $? -ne 0 ]; then
+  logMsg $LINENO "ERROR:  smash did not exit normally"
+  deductPoints $LINENO $LETTERGRADE
+fi
+
+#Smash should emit an error message to stderr when asked to cd non-existing directory
+logMsg $LINENO "Grading cd non-existing-directory"
+echo "cd non-existing-directory" | $TIMEOUT $EXE 2>$TMPFILE
+deductnGrep $LINENO "No such file or directory" $TMPFILE $HALFLETTERGRADE
+
+#Smash should be able to cd into an existing directory without an error
+logMsg $LINENO "Grading cd existing-directory"
+mkdir existing-directory
+echo "cd existing-directory" | $TIMEOUT $EXE 2>$TMPFILE
+deductGrep $LINENO "No such" $TMPFILE $HALFLETTERGRADE
+rmdir existing-directory
+
+#Exercise the history command
+logMsg $LINENO "Grading basicHistory features"
+$TIMEOUT $EXE <$BASICHISTORY >$TMPFILE
+deductnGrep $LINENO "1.*ls"        $TMPFILE $HALFLETTERGRADE
+deductnGrep $LINENO "2.*cd *foo"    $TMPFILE $HALFLETTERGRADE
+deductnGrep $LINENO "\[.*1.*\] *cd" $TMPFILE $HALFLETTERGRADE
+deductnGrep $LINENO "4.*history"    $TMPFILE $HALFLETTERGRADE
+
+
+#-------------------------------------------------------------------------------
+# Grading ends
+#-------------------------------------------------------------------------------
+logMsg $LINENO "----- Grading with $0 ends:  pointsLost=$pointsLost -----"
+exit $pointsLost

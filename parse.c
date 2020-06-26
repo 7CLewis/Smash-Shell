@@ -1,4 +1,5 @@
 #define _GNU_SOURCE
+#define EXIT_COMMAND_STATUS -22
 #include "history.h"
 #include "parse.h"
 
@@ -27,7 +28,8 @@ int chopCommands(char* args[], char* strCopy) {
 
 /*
  * Separate a single command into its individual arguments
- * Example: "ls -l" will yield currArgs[0] = "ls", currArgs[1] = "-l" 
+ * Example: "ls -l" will yield currArgs[0] = "ls", currArgs[1] = "-l"
+ * Adds the NULL pointer as the last argument 
  */
 int separateArgs(char* currArgs[], char* cmd) {
 	char *token = strtok(cmd, " ");
@@ -36,6 +38,7 @@ int separateArgs(char* currArgs[], char* cmd) {
 		currArgs[argCount++] = token;
 		token = strtok(NULL, " ");
 	}
+	currArgs[argCount] = '\0';
 	return argCount;
 }
 
@@ -49,14 +52,11 @@ int execute(char *str) {
 		setvbuf(stdout,NULL,_IONBF,0);
 
 		char *strCopy = strndup(str, strlen(str));
-
 		char *args[50];
-
 		int exitStatus = 0;
 
 		//Chop the string into separate commands
 		int commandCount = chopCommands(args, strCopy);
-		
 		int currentCommand = 0;
 		// Parse each command
 		do {
@@ -71,10 +71,20 @@ int execute(char *str) {
 			//TODO: Forks
 
 			//Execute the command
-			executeCommand(currArgs, count);
+			exitStatus = executeCommand(currArgs, count);
+
+			//If the exit status is the exit command's status,
+			//free the duplicated string and exit the program
+			if(exitStatus == EXIT_COMMAND_STATUS) {
+				free(strCopy);
+				exit(0);
+			}
+
 			currentCommand++;
 			commandCount--;
 		} while (commandCount > 0);
+
+		add_history(str, exitStatus);
 
 		free(strCopy);
 

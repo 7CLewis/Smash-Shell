@@ -1,0 +1,4 @@
+mkdir testDir.tmp
+cd testDir.tmp
+cp ../testCommands.in testCommands.out
+exit
