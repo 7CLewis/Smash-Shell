@@ -1,6 +1,8 @@
 #define _GNU_SOURCE
+#define EXTERNAL_COMMAND -23
 #define EXIT_COMMAND "exit"
 #define EXIT_COMMAND_LENGTH 5
+#define EXIT_COMMAND_STATUS -22
 #define CD_COMMAND "cd"
 #define CD_COMMAND_LENGTH 3
 #define HISTORY_COMMAND "history"
@@ -12,7 +14,6 @@
 #include <stdlib.h>   //Standard library (includes exit function)
 #include <string.h>   //String manipulation functions
 #include <unistd.h>   //chdir
-#include <fcntl.h>    //File descriptors 
 #include <sys/wait.h> //Used for wait() to retrieve exit statuses
 #include <errno.h> 	  //Retrieve error codes
 #include <fcntl.h>	  //Manipulating file descriptors
@@ -20,27 +21,14 @@
 int sequenceCount = 0;
 
 //Execute an external command - not directly supported by smash
-int executeExternalCommand(char* prog, char* argsArr[]) {
+void executeExternalCommand(char* prog, char* argsArr[]) {
 
-    setvbuf(stdout,NULL,_IONBF,0);
-    int pid = fork();
-    int exitStatus = 0;
+    execvp(prog, argsArr);
+    
+    //if these lines are reached, execvp did not execute properly
+    perror("Execvp failed");
+	exit(-1);
 
-    //If the current process is the child process
-    if(pid == 0) {
-        execvp(prog, argsArr);
-        //if these lines are reached, execvp did not execute properly
-        perror("Execvp failed");
-		exit(-1);
-    } else {
-
-        int originalExitStatus;
-        wait(&originalExitStatus);   
-
-        //Adjust the exit status
-		exitStatus = WEXITSTATUS(originalExitStatus);
-    }
-    return exitStatus;
 }
 
 // Execute the command the user passed in
@@ -55,7 +43,7 @@ int executeCommand(char *args[], int argsCount) {
     //exit - exit the smash shell
     if(strncmp(program, EXIT_COMMAND, EXIT_COMMAND_LENGTH) == 0) {
         clear_history();
-        return -22;
+        return EXIT_COMMAND_STATUS;
     }
 
     //cd - change directories
@@ -77,9 +65,10 @@ int executeCommand(char *args[], int argsCount) {
         }
     }
 
-    //external command - any command that isn't one of the ones above
+    //Any command that isn't one of the ones above
     else {
-        exitStatus = executeExternalCommand(program, args);
+        sequenceCount++;
+        return EXTERNAL_COMMAND;
     }
 
     sequenceCount++;

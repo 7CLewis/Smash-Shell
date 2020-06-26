@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #define EXIT_COMMAND_STATUS -22
+#define COMMAND_NOT_FOUND -23
 #include "history.h"
 #include "parse.h"
 
@@ -9,6 +10,7 @@
 #include <fcntl.h>    //File descriptors 
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <unistd.h>   //chdir, fork
 
 /*
  * Chop a piped command into individual commands
@@ -42,6 +44,13 @@ int separateArgs(char* currArgs[], char* cmd) {
 	return argCount;
 }
 
+int locateInputRedirect(char* args[]) {
+	return 0;
+}
+
+int locateOutputRedirect(char *args[]) {
+	return 0;
+}
 
 // Execute the command the user passed in
 int execute(char *str) {
@@ -58,6 +67,11 @@ int execute(char *str) {
 		//Chop the string into separate commands
 		int commandCount = chopCommands(args, strCopy);
 		int currentCommand = 0;
+
+		//Create the array of file descriptors for each pipe
+		int pipeFileDescriptors[10][2];
+		int currentPipe = 0;
+
 		// Parse each command
 		do {
 			//Parse for current command
@@ -66,9 +80,17 @@ int execute(char *str) {
 			//Split the command up into individual pieces
 			int count = separateArgs(currArgs, args[currentCommand]);
 
-			//TODO: Parse for '>' or '<'
-			//TODO: Pipes
-			//TODO: Forks
+			//Search for '>' and '<'
+			int input = locateInputRedirect(currArgs);
+			int output = locateOutputRedirect(currArgs);
+
+			//Create a pipe if necessary 
+			if (commandCount > 1) {
+				if(pipe(pipeFileDescriptors[currentPipe]) < 0){
+					perror("Error: Could not create pipe");
+					exit(-1);
+				}
+			}
 
 			//Execute the command
 			exitStatus = executeCommand(currArgs, count);
@@ -78,8 +100,22 @@ int execute(char *str) {
 			if(exitStatus == EXIT_COMMAND_STATUS) {
 				free(strCopy);
 				exit(0);
+			} else if (exitStatus == COMMAND_NOT_FOUND) {
+				int pid = fork();
+				//Arrange file descriptors
+
+				if(pid == 0) {
+					exitStatus = executeExternalCommand(currArgs[0], currArgs);
+				} else {
+					int originalExitStatus;
+					wait(&originalExitStatus);   
+
+					//Adjust the exit status
+					exitStatus = WEXITSTATUS(originalExitStatus);
+    			}
 			}
 
+			currentPipe++;
 			currentCommand++;
 			commandCount--;
 		} while (commandCount > 0);
