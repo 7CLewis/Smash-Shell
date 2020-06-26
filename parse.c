@@ -1,6 +1,6 @@
 #define _GNU_SOURCE
 #include "history.h"
-#include "smash.h"
+#include "parse.h"
 
 #include <stdio.h>    //Standard I/O functions and definitions
 #include <stdlib.h>   //Standard library (includes exit function)
@@ -8,6 +8,37 @@
 #include <fcntl.h>    //File descriptors 
 #include <sys/types.h>
 #include <sys/wait.h>
+
+/*
+ * Chop a piped command into individual commands
+ * Example: "ls -l | wc" will yield args[0] = "ls -l", args[1] = "wc"
+ * A single command, i.e., "cd example", will yield args[0] = "cd example"
+ */
+int chopCommands(char* args[], char* strCopy) {
+		// Parse the string and separate the commands by the pipes
+		char *token = strtok(strCopy, "|");
+		int count = 0;
+		while(token != NULL) {
+			args[count++] = token;
+			token = strtok(NULL, " ");
+		}
+		return count;
+}
+
+/*
+ * Separate a single command into its individual arguments
+ * Example: "ls -l" will yield currArgs[0] = "ls", currArgs[1] = "-l" 
+ */
+int separateArgs(char* currArgs[], char* cmd) {
+	char *token = strtok(cmd, " ");
+	int argCount = 0;
+	while(token != NULL) {
+		currArgs[argCount++] = token;
+		token = strtok(NULL, " ");
+	}
+	return argCount;
+}
+
 
 // Execute the command the user passed in
 int execute(char *str) {
@@ -23,16 +54,27 @@ int execute(char *str) {
 
 		int exitStatus = 0;
 
-		int commandCount = 0;
-
-		// Parse the string and separate the commands by the pipes
-		char *token = strtok(str, "|");
-		while(token != NULL) {
-			args[commandCount++] = token;
-			token = strtok(NULL, " ");
-		}
-		// Parse each command
+		//Chop the string into separate commands
+		int commandCount = chopCommands(args, strCopy);
 		
+		int currentCommand = 0;
+		// Parse each command
+		do {
+			//Parse for current command
+			char *currArgs[50];
+
+			//Split the command up into individual pieces
+			int count = separateArgs(currArgs, args[currentCommand]);
+
+			//TODO: Parse for '>' or '<'
+			//TODO: Pipes
+			//TODO: Forks
+
+			//Execute the command
+			executeCommand(currArgs, count);
+			currentCommand++;
+			commandCount--;
+		} while (commandCount > 0);
 
 		free(strCopy);
 
@@ -40,8 +82,6 @@ int execute(char *str) {
 	}
 	return 0;
 }
-
-
 
 
 

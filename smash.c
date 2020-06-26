@@ -1,7 +1,6 @@
 #define MAXLINE 4096
 #include "smash.h"
 #include "history.h"
-#include "parse.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
