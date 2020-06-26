@@ -12,6 +12,8 @@
 #include <sys/wait.h>
 #include <unistd.h>   //chdir, fork
 
+int sequenceCount = 0;
+
 /*
  * Chop a piped command into individual commands
  * Example: "ls -l | wc" will yield args[0] = "ls -l", args[1] = "wc"
@@ -23,7 +25,7 @@ int chopCommands(char* args[], char* strCopy) {
 		int count = 0;
 		while(token != NULL) {
 			args[count++] = token;
-			token = strtok(NULL, " ");
+			token = strtok(NULL, "|");
 		}
 		return count;
 }
@@ -45,12 +47,18 @@ int separateArgs(char* currArgs[], char* cmd) {
 }
 
 int locateInputRedirect(char* args[]) {
+
 	return 0;
 }
 
 int locateOutputRedirect(char *args[]) {
 	return 0;
 }
+
+//void arrangeFileDescriptors(int pipeFileDescriptors[][2], int currPipe, int currCommand, int totalCommands) {}
+
+// void closeFileDescriptors(int pipeFileDescriptors[][2], int currPipe, int currCommand, int totalCommands) {}
+
 
 // Execute the command the user passed in
 int execute(char *str) {
@@ -66,6 +74,7 @@ int execute(char *str) {
 
 		//Chop the string into separate commands
 		int commandCount = chopCommands(args, strCopy);
+		int commandHolder = commandCount;
 		int currentCommand = 0;
 
 		//Create the array of file descriptors for each pipe
@@ -81,8 +90,8 @@ int execute(char *str) {
 			int count = separateArgs(currArgs, args[currentCommand]);
 
 			//Search for '>' and '<'
-			int input = locateInputRedirect(currArgs);
-			int output = locateOutputRedirect(currArgs);
+			//int input = locateInputRedirect(currArgs);
+			//int output = locateOutputRedirect(currArgs);
 
 			//Create a pipe if necessary 
 			if (commandCount > 1) {
@@ -92,8 +101,8 @@ int execute(char *str) {
 				}
 			}
 
-			//Execute the command
-			exitStatus = executeCommand(currArgs, count);
+			//Execute internal command, if the current command is internal
+			exitStatus = executeCommand(currArgs, count, sequenceCount);
 
 			//If the exit status is the exit command's status,
 			//free the duplicated string and exit the program
@@ -102,16 +111,37 @@ int execute(char *str) {
 				exit(0);
 			} else if (exitStatus == COMMAND_NOT_FOUND) {
 				int pid = fork();
-				//Arrange file descriptors
 
 				if(pid == 0) {
-					exitStatus = executeExternalCommand(currArgs[0], currArgs);
-				} else {
-					int originalExitStatus;
-					wait(&originalExitStatus);   
+					//Arrange file descriptors
+					//arrangeFileDescriptors(pipeFileDescriptors, currentPipe, currentCommand, commandHolder);
+					if(commandHolder > 1) {
+						if(currentCommand+1 == 1) {
+							dup2(pipeFileDescriptors[currentCommand][1],1);
+						} else if(commandHolder == currentCommand+1) {
+							dup2(pipeFileDescriptors[currentCommand-1][0], 0);
+						} else {
+							dup2(pipeFileDescriptors[currentCommand-1][0], 0);
+							dup2(pipeFileDescriptors[currentCommand][1],1);
+						}
+					}
 
-					//Adjust the exit status
-					exitStatus = WEXITSTATUS(originalExitStatus);
+					executeExternalCommand(currArgs[0], currArgs);
+					exit(-2);
+
+				} else {
+					//Close file descriptors
+					// closeFileDescriptors(pipeFileDescriptors, currentPipe, currentCommand+1, commandHolder);
+					if(commandHolder > 1) {
+						if(currentCommand+1 == 1) {
+							close(pipeFileDescriptors[currentCommand][1]);
+						} else if(commandHolder == currentCommand+1) {
+							close(pipeFileDescriptors[currentCommand-1][0]);
+						} else {
+							close(pipeFileDescriptors[currentCommand-1][0]);
+							close(pipeFileDescriptors[currentCommand][1]);
+						}
+					}
     			}
 			}
 
@@ -120,7 +150,22 @@ int execute(char *str) {
 			commandCount--;
 		} while (commandCount > 0);
 
+		if(exitStatus == COMMAND_NOT_FOUND) {
+			exitStatus = 0;
+			for(int i = 0; i < commandHolder; i++) {
+				int originalExitStatus;
+				wait(&originalExitStatus);   
+
+				//Adjust the exit status
+				int adjustedStatus = WEXITSTATUS(originalExitStatus);
+				if(adjustedStatus != 0) {
+					exitStatus = 127;
+				}
+			}
+		}
+
 		add_history(str, exitStatus);
+		sequenceCount++;
 
 		free(strCopy);
 

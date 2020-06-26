@@ -18,8 +18,6 @@
 #include <errno.h> 	  //Retrieve error codes
 #include <fcntl.h>	  //Manipulating file descriptors
 
-int sequenceCount = 0;
-
 //Execute an external command - not directly supported by smash
 void executeExternalCommand(char* prog, char* argsArr[]) {
 
@@ -32,7 +30,7 @@ void executeExternalCommand(char* prog, char* argsArr[]) {
 }
 
 // Execute the command the user passed in
-int executeCommand(char *args[], int argsCount) {
+int executeCommand(char *args[], int argsCount, int sequenceCount) {
 	
     int exitStatus = 0;
     if (argsCount == 0) {
