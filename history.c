@@ -1,4 +1,4 @@
-//#define _BSD_SOURCE
+#define _GNU_SOURCE
 #define _DEFAULT_SOURCE
 #include "history.h"  //Header file for this class
 #include <stdio.h>    //Standard I/O functions and definitions
@@ -28,7 +28,7 @@ void init_history(void)
 //Adds an entry to the history
 void add_history(char *cmd, int exitStatus)
 {
-	char *cmdCopy = strdup(cmd);
+	char *cmdCopy = strndup(cmd, strlen(cmd));
 
 	if(count >= 10) {
 		slide_history();
