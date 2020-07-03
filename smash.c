@@ -35,11 +35,13 @@ int main(int argc, char **argv)
 		
 		if(p == NULL) {
 			fputs("The line you entered was too long", stderr);
-			exit(1);
+			exitStatus = 1;
+		} else {
+			bfr[strlen(bfr) - 1] = '\0'; //Replace newline with NULL
+			exitStatus = execute(bfr);
 		}
 		
-		bfr[strlen(bfr) - 1] = '\0'; //Replace newline with NULL
-		exitStatus = execute(bfr);
+
 		fputs("$ ", stderr);
 	}
 

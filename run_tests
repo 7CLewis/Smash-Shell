@@ -1,0 +1,247 @@
+#!/bin/bash
+
+#--------------------------------------------------------------------------------
+#
+# test_smash -- Tests for the smash Shell project
+# Author: Jim Conrad - Boise State University Professor
+# Modified by Casey Lewis
+#
+# Usage
+#   ./test_smash
+#
+# Exits with number of failed tests
+#
+#-------------------------------------------------------------------------------
+
+#Configuration:  Define basic values
+EXE=./smash
+VALOUT=valgrind.txt
+ADDERROR=1
+
+#Initialization:  Define the log file and other relevant variables
+RESULTS=results.txt
+PROGRAM=./smash
+errors=0
+TMPFILE=/tmp/"$USER""$$"
+TEST0=`pwd`/tests/basic.in
+LONGHISTORY=`pwd`/tests/longHistory.in
+BASICHISTORY=`pwd`/tests/basicHistory.in
+TESTCOMMANDS=`pwd`/tests/testCommands
+BIGIN=`pwd`/tests/big.in
+TESTEXITSTATUS=`pwd`/tests/testExitStatus.in
+TESTDIR=testDir.tmp
+
+#The timeout and valgrind utilities are available on linux but not on standard macOS
+TIMEOUT="timeout 5s"
+VALGRIND=valgrind
+
+#--------------------------------------------------------------------------------
+# Define function to log a message to the dest file.
+# Usage:  logMsg $LINENO messageText
+#--------------------------------------------------------------------------------
+logMsg() {
+  echo "[$1] " "$2" "(Current Error Count=$errors)" >>$RESULTS
+}
+
+#---------------------------------------------------------------------------------
+# Define function to deduct points if the specified file exists
+# Usage:  deductFileExists $LINENO filename nPoints
+#---------------------------------------------------------------------------------
+deductFileExists() {
+  if [ -e "$2" ]; then
+    increaseErrorCount
+    logMsg "$1" "ERROR:  Unexpected file $2.  errors-=$3 points"
+  fi
+}
+
+#--------------------------------------------------------------------------------
+# Define function to deduct points if the specified file is missing
+# Usage:  deductFileMissing $LINENO filename nPoints
+#--------------------------------------------------------------------------------
+deductFileMissing() {
+   if [ -f "$2" ]; then
+     increaseErrorCount
+     logMsg "$1" "ERROR:  Missing file $2.  errors==$3 points"
+   fi
+}
+
+#---------------------------------------------------------------------------------
+# Define function to deduct points if regexp is missing from string.  Ignores
+# case.
+# Usage:  deductMissingString $LINENO string regexp nPoints
+#---------------------------------------------------------------------------------
+deductMissingString() {
+   if ! echo "$2" | grep -i -q "$3" ; then
+      increaseErrorCount
+      logMsg "$1" " ERROR:  Substring "$3" missing in string, "$2".  errors-=$4 points"
+   fi
+}
+
+#---------------------------------------------------------------------------------
+# Define function to deduct points if regexp appears in string.  Ignores
+# case.
+# Usage:  deductMissingString $LINENO string regexp nPoints
+#---------------------------------------------------------------------------------
+deductString() {
+   if echo "$2" | grep -i -q "$3" ; then
+      increaseErrorCount
+      logMsg "$1" " ERROR:  Regexp "$3" appears in string, "$2".  errors-=$4 points"
+   fi
+}
+
+#---------------------------------------------------------------------------------
+# Define function to deduct points if regexp is found in a specified file
+# Usage:  deductGrep $LINENO regexp filename nPoints
+#---------------------------------------------------------------------------------
+deductGrep() {
+  output=$(grep -i "$2" "$3")
+  if [ "$?" == 0 ]; then
+    increaseErrorCount
+    logMsg "$1" " ERROR:  Found unexpected regexp '$2' in '$3'."
+  fi
+}
+
+#---------------------------------------------------------------------------------
+# Define function to deduct points if regexp is missing from a specified file
+# Usage:  deductnGrep $LINENO regexp filename nPoints
+#---------------------------------------------------------------------------------
+deductnGrep() {
+  output=$(grep -i "$2" "$3")
+  if [ "$?" != 0 ]; then
+    increaseErrorCount
+    logMsg "$1" "ERROR:  Could not grep $2 in $3"
+  fi
+}
+
+#---------------------------------------------------------------------------------
+# Define function to deduct points from errors
+# Usage:  increaseErrorCount nPoints
+#---------------------------------------------------------------------------------
+increaseErrorCount() {
+  let errors+=1
+}
+
+#--------------------------------------------------------------------------------
+# Checking starts here
+#--------------------------------------------------------------------------------
+
+#Clean previous results
+rm -f $RESULTS &>/dev/null
+
+#-------Log a message into the results file before something goes horribly wrong
+logMsg $LINENO "----- Start with $0"
+
+#-------Manually clean the project directory
+rm -f $PROGRAM $PROGRAM.o *.a >/dev/null 2>&1
+
+#-------Test build default target
+logMsg $LINENO "Running make"
+result=$( make 2>&1 )
+
+#-------Verify make actually built the executable program
+logMsg $LINENO "Checking make default target"
+if [ ! -x $EXE ]; then
+    logMsg $LINENO "FATAL:  make did not build $EXE"
+    increaseErrorCount
+continue
+fi
+
+#-------Verify make ran without warnings
+logMsg $LINENO "Checking make warnings"
+deductString $LINENO "$result" "warning"
+
+#-------Verify make ran without errors
+logMsg $LINENO "Checking make errors"
+deductString $LINENO "$results" "error"
+
+#-------Verify configuration of CFLAGS with -Wall and -std=c99
+logMsg $LINENO "Checking configuration of Makefile with CFLAGS = -Wall -std=c99"
+deductnGrep $LINENO "CFLAGS" Makefile
+deductnGrep $LINENO "Wall"   Makefile
+deductnGrep $LINENO "c99"    Makefile
+
+#-------Verify make clean removes binary build artifacts
+logMsg $LINENO "Checking make clean"
+make clean
+result=$( ls *.o *.a 2>&1 )
+deductMissingString $LINENO "$result" "No such file"
+result=$( ls $EXE 2>&1 )
+deductMissingString $LINENO "$result" "No such file"
+
+#-------Verify make does nothing if the product is already built (see man make for explanation of -q option)
+logMsg $LINENO "Checking make does nothing when product is already up-to-date"
+make
+make -q
+if [ "$?" -ne "0" ]; then
+    logMsg $LINENO "ERROR:  Make should do nothing when product is alredy up-to-date"
+    increaseErrorCount $LINENO
+fi
+
+#-------Smash should exit normally given an exit command
+logMsg $LINENO "Checking exit command"
+echo exit | $TIMEOUT $EXE 2>/dev/null
+if [ $? -ne 0 ]; then
+    logMsg $LINENO "ERROR:  ./smash did not exit normally"
+    increaseErrorCount $LINENO
+fi
+
+#-------Smash should emit an error message to stderr when asked to cd non-existing directory
+logMsg $LINENO "Checking cd non-existing-directory"
+echo "cd non-existing-directory" | $TIMEOUT $EXE 2>$TMPFILE
+deductnGrep $LINENO "No such file or directory" $TMPFILE
+
+#-------Smash should be able to cd into an existing directory without an error
+logMsg $LINENO "Checking cd existing-directory"
+mkdir existing-directory
+echo "cd existing-directory" | $TIMEOUT $EXE 2>$TMPFILE
+deductGrep $LINENO "No such" $TMPFILE
+rmdir existing-directory
+
+#-------Test the history command
+logMsg $LINENO "Checking basicHistory features"
+$TIMEOUT $EXE <$BASICHISTORY >$TMPFILE
+deductnGrep $LINENO "1.*ls"        $TMPFILE
+deductnGrep $LINENO "2.*cd *foo"    $TMPFILE
+deductnGrep $LINENO "\[.*1.*\] *cd" $TMPFILE
+deductnGrep $LINENO "4.*history"    $TMPFILE
+
+#-------Test wrap-around history (Command #11)
+logMsg $LINENO "Checking long history using $LONGHISTORY"
+$TIMEOUT ./smash <$LONGHISTORY >$TMPFILE
+deductnGrep $LINENO "11.*theLastLsCommand" $TMPFILE
+
+#-------Verify that the cd command changes smash's current working directory
+logMsg $LINENO "Checking the cd command changes smash current working directory"
+$TIMEOUT $EXE <$TESTCOMMANDS.in
+deductFileMissing $LINENO $TESTDIR/$TESTCOMMANDS.out
+ps | fgrep -v fgrep | fgrep ./smash
+if [ "$?" != 1 ]; then
+    increaseErrorCount
+    logMsg $LINENO "ERROR:  The smash process did not exit"
+fi
+rm -fr $TESTDIR
+
+#-------Verify that smash is recording exit status of external commands in history
+logMsg $LINENO "Checking exit status of external command recorded in history"
+result=$( $TIMEOUT $EXE <$TESTEXITSTATUS )
+deductMissingString $LINENO "$result" "1.*1.*fgrep.*smash"
+
+
+#-------Check for memory problems using valgrind. valgrind.txt should be empty if program had no issues
+logMsg $LINENO "Running valgrind $EXE"
+$TIMEOUT cat $TESTIN $BIGIN | $VALGRIND --leak-check=full --show-leak-kinds=all --child-silent-after-fork=yes $EXE 2>&1 >$VALOUT
+deductGrep $LINENO "Definitely *lost" $VALOUT
+
+#-------Manual clean-up following tests
+rm -f $PROGRAM.o $PROGRAM >>/dev/null 2>&1
+
+#-------Record all errors to stdout and the log file
+if [ "$errors" -lt "0" ]; then
+    let errors=0
+fi
+    echo $d $errors
+echo "[$LINENO] " "Final Error Count=$errors" >>$RESULTS
+
+#-------Manually clean and exit this directory
+rm -f $EXE *.o *.a
+popd &>/dev/null
