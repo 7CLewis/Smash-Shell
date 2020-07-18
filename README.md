@@ -1,6 +1,5 @@
 # Smash Shell
 * Author: Casey Lewis
-* Test cases were created by Boise State University Professors and modified by myself. 
 
 ## Overview
 This program generates a "smash" shell - a simplified version of
