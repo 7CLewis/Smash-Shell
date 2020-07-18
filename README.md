@@ -1,8 +1,6 @@
 # Smash Shell
 * Author: Casey Lewis
-* Project description and test cases were created by Boise State University Professors.
-* I have modified the test cases, but all credit goes to the BSU Professors.
-* 27 June 2020
+* Test cases were created by Boise State University Professors and modified by myself. 
 
 ## Overview
 This program generates a "smash" shell - a simplified version of
